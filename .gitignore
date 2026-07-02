@@ -1,14 +1,3 @@
-# Internal planning/process docs — not for the public repo
-ROADMAP.md
-ROADMAP_PROMPT.md
-SPEC.md
-RULES.md
-CLAUDE.md
-CONTEXT.md
-CHECKPOINT.md
-AI_PAIR_PROGRAMMING_PROTOCOL.md
-.claude/
-
 # Secrets — never commit real keys, only .env.example
 .env
 
