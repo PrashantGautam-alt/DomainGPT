@@ -1,0 +1,33 @@
+# Internal planning/process docs — not for the public repo
+ROADMAP.md
+ROADMAP_PROMPT.md
+SPEC.md
+RULES.md
+CLAUDE.md
+CONTEXT.md
+CHECKPOINT.md
+AI_PAIR_PROGRAMMING_PROTOCOL.md
+.claude/
+
+# Secrets — never commit real keys, only .env.example
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Scraped/derived corpus content and build artifacts — regenerate via src/ingest.py,
+# don't redistribute scraped third-party text (NCFE/SEBI/Wikipedia) verbatim in a public repo.
+# Fine-tuned weights ship to HuggingFace Hub, not git.
+data/raw/
+data/processed/
+embeddings/
+models/
+
+# Eval artifacts derived from the corpus — review before ever un-ignoring
+eval/eval_set.json
+
+# OS
+.DS_Store

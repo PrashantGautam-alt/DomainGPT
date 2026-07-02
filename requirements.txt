@@ -1,0 +1,14 @@
+torch
+transformers
+peft
+bitsandbytes
+faiss-cpu
+sentence-transformers
+fastapi
+uvicorn
+streamlit
+python-dotenv
+openai
+pandas
+beautifulsoup4
+requests
