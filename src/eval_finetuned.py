@@ -94,7 +94,8 @@ def main():
             ask_correct += int(asked)
 
         details.append({"type": ex["type"], "expected": ex["expected_tool"],
-                        "tool": tool, "asked": asked, "query": ex["query"][:45]})
+                        "tool": tool, "asked": asked, "query": ex["query"][:45],
+                        "raw": output.strip()[:220].replace("\n", " ")})
 
     def rate(n, d):
         return round(n / d, 3) if d else None
@@ -105,9 +106,10 @@ def main():
     print(f"Elicitation proceed-rate: {rate(proceed_correct, proceed_total)} (n={proceed_total})")
 
     if args.show_details:
-        print("\n--- per-example ---")
+        print("\n--- per-example (with raw model output) ---")
         for d in details:
-            print(f"  [{d['type']:9}] exp={str(d['expected'])[:22]:22} tool={str(d['tool'])[:22]:22} asked={d['asked']}  {d['query']}")
+            print(f"  [{d['type']:9}] tool={str(d['tool'])[:20]:20} asked={d['asked']}  Q: {d['query']}")
+            print(f"      RAW: {d['raw']}")
 
 
 if __name__ == "__main__":
