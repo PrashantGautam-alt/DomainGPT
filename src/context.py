@@ -17,9 +17,11 @@ from dataclasses import dataclass, field, fields, asdict
 # they come fresh from each question.
 PERSONAL_NUMERIC_FIELDS = ["income", "monthly_expenses", "existing_debt_payment", "savings"]
 
-# Which personal fields each tool needs before it can run.
+# Which personal fields each tool genuinely needs before it can run. Kept minimal so the
+# agent asks as few questions as possible (existing_debt defaults to 0 if the user never
+# mentions it, rather than being a separate question).
 TOOL_REQUIRED_PERSONAL_FIELDS = {
-    "affordability_calculator": ["income", "monthly_expenses", "existing_debt_payment"],
+    "affordability_calculator": ["income", "monthly_expenses"],
     "emi_vs_cash_calculator": [],
     "budget_split_calculator": ["income"],
     "job_quit_runway_calculator": ["savings", "monthly_expenses"],

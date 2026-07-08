@@ -1,12 +1,17 @@
-# DomainGPT — Agentic Personal-Finance Assistant
+# NomosAI — Agentic Personal-Finance Assistant
 
-A deployed **agentic** assistant that helps students and early-career professionals in India make
-everyday money decisions — *"can I afford this phone, cash or EMI?"*, *"should I use a credit card?"*,
-*"how much should I save?"*, *"should we start trading to earn money?"* — by combining four techniques,
+*(repo/model artifacts are named `domaingpt` from the project's original name.)*
+
+A deployed **goal-oriented agentic** assistant that helps students and early-career professionals in
+India make everyday money decisions — *"can I afford this phone, cash or EMI?"*, *"should I use a
+credit card?"*, *"how much should I earn to buy a Royal Enfield Bullet?"* — by combining five techniques,
 each doing a job the others can't:
 
+- **Goal-oriented reasoning** over the full conversation: keeps the user's goal active, asks one
+  question at a time, and stops asking once it can answer (no forgetting, no re-asking)
 - **RAG** grounds general financial principles in cited investor-education sources (NCFE / SEBI / Wikipedia)
-- **Tool-calling calculators** do the arithmetic **deterministically** (never the LLM)
+- **Tool-calling calculators** do the arithmetic **deterministically** (never the LLM), plus **live web
+  search** (DuckDuckGo) to look up facts like prices instead of asking the user
 - **Context elicitation** asks for missing personal numbers instead of guessing them
 - A **QLoRA fine-tune** of Llama-3.1-8B teaches the behavioral policy (when to ask, which tool, tradeoff-first tone, and the educational-only advice boundary)
 

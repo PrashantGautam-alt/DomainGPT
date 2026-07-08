@@ -19,20 +19,31 @@ CALCULATOR_TOOLS = {
 }
 
 
-def answer(query: str, context: FinancialContext, retriever, cache: SemanticCache | None = None) -> dict:
+def answer(conversation, context: FinancialContext, retriever,
+           cache: SemanticCache | None = None, web_search=None) -> dict:
+    """`conversation` is the full [{role, content}] history (or a single user string).
+    Runs the goal-oriented agent over it with cache + fallback + privacy-aware logging."""
+    if isinstance(conversation, str):
+        history = [{"role": "user", "content": conversation}]
+    else:
+        history = conversation
+    latest_query = next((m["content"] for m in reversed(history) if m.get("role") == "user"), "")
+    user_turns = sum(1 for m in history if m.get("role") == "user")
+
     had_context_before = bool(context.known_fields())
-    # Cacheable only if the user has given no personal context yet — a general-principle question.
-    cacheable = cache is not None and not had_context_before
+    # Cache only a first-turn, no-context, general-principle question (multi-turn is personal).
+    cacheable = cache is not None and not had_context_before and user_turns <= 1
 
     if cacheable:
-        cached = cache.get(query)
+        cached = cache.get(latest_query)
         if cached is not None:
             _log(latency_ms=0, tools=[], context_provided=False, asked=False,
                  degraded=False, cache_hit=True, model="cache")
             return {**cached, "cache_hit": True, "model": "cache"}
 
     with Timer() as t:
-        out = run_agent_with_fallback(query, context=context, retriever=retriever)
+        out = run_agent_with_fallback(history, context=context, retriever=retriever,
+                                      web_search=web_search)
 
     used_calculator = any(tc in CALCULATOR_TOOLS for tc in out["tool_calls"])
     context_used = bool(context.known_fields())
@@ -40,7 +51,7 @@ def answer(query: str, context: FinancialContext, retriever, cache: SemanticCach
 
     # Only cache pure general-principle answers: no personal context, no calculator, actually answered.
     if cacheable and not used_calculator and not context_used and not asked and out.get("answer"):
-        cache.put(query, out["answer"], out["sources"])
+        cache.put(latest_query, out["answer"], out["sources"])
 
     _log(latency_ms=t.elapsed_ms, tools=out["tool_calls"], context_provided=context_used,
          asked=asked, degraded=out.get("degraded", False), cache_hit=False, model=out.get("model", "?"))

@@ -114,12 +114,44 @@ TOOL_SCHEMAS = [
     },
 ]
 
-AGENT_SYSTEM_PROMPT = """You are DomainGPT, a financial-decision assistant for students and \
-early-career professionals in India. You have calculator tools for affordability, EMI-vs-cash, \
-budgeting, and job-quit runway. Call the right tool for arithmetic questions rather than computing \
-numbers yourself. Never invent a personal financial value (income, expenses, debt, savings) — if \
-one is needed and unknown, ask the user for it. Explain tradeoffs in your final answer. You never \
-recommend a specific stock or fund to buy — that stays educational only.
+WEB_SEARCH_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "web_search",
+        "description": "Search the live web for a real-world fact you don't have, such as a product's current price (e.g. a bike, phone, or laptop). Use this BEFORE asking the user for a fact you could look up yourself. Returns short text snippets from the top results.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "What to look up on the web, e.g. 'Royal Enfield Bullet 350 on-road price India'"},
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+AGENT_SYSTEM_PROMPT = """You are NomosAI, a goal-oriented financial-decision assistant for students \
+and early-career professionals in India. Reason like a smart human expert, not a form-filling chatbot.
+
+Follow this decision process on every turn:
+1. Identify the user's GOAL from the conversation and keep it active. Never lose track of what they \
+are trying to work out, and never restart the conversation.
+2. Check what you ALREADY KNOW from the conversation so far (the running notes are given below). \
+Never ask for something the user already told you.
+3. If a fact is missing but you can look it up yourself (like a product's price), use the web_search \
+tool instead of asking the user.
+4. Only if information is still missing and you cannot look it up, ask the user for the SINGLE most \
+important missing thing. One short question at a time, never a list of fields.
+5. As soon as you have enough to give a useful answer, ANSWER. Do not keep asking questions once you \
+can make meaningful progress. It is better to answer with a stated assumption than to over-ask.
+
+Tools: use the calculators for arithmetic (affordability, EMI-vs-cash, budgeting, job-quit runway) \
+rather than computing in your head; use search_financial_knowledge for general financial principles; \
+use web_search for real-world facts like prices. Never invent a personal financial value (income, \
+expenses, debt, savings); those come only from what the user tells you.
+
+Style: explain tradeoffs, be concise and practical. Never recommend a specific stock or fund to buy \
+that stays educational only. Do not use the long dash character in your replies; write with commas, \
+periods, or short dashes instead.
 """
 
 
@@ -129,56 +161,58 @@ def _execute_tool_call(name: str, args: dict) -> str:
     return json.dumps(asdict(result))
 
 
-def _clarifying_question(missing_fields: list[str]) -> str:
-    labels = {
-        "income": "your monthly income",
-        "monthly_expenses": "your monthly expenses",
-        "existing_debt_payment": "your current monthly debt/EMI payments (₹0 if none)",
-        "savings": "your total savings",
-    }
-    asks = [labels.get(f, f) for f in missing_fields]
-    if len(asks) == 1:
-        return f"To work that out, could you tell me {asks[0]}?"
-    return "To work that out, could you tell me " + ", ".join(asks[:-1]) + f", and {asks[-1]}?"
+def _strip_em_dash(text: str | None) -> str | None:
+    """Remove the long dash characters the user asked never to show in the UI."""
+    if not text:
+        return text
+    return text.replace(" — ", ", ").replace("—", "-").replace(" – ", ", ").replace("–", "-")
+
+
+def _normalize_history(conversation) -> list[dict]:
+    """Accept either a single user string (eval path) or a full [{role, content}] history
+    (product path) and return clean {role, content} turns for the model."""
+    if isinstance(conversation, str):
+        return [{"role": "user", "content": conversation}]
+    return [{"role": m["role"], "content": m["content"]} for m in conversation
+            if m.get("role") in ("user", "assistant") and m.get("content")]
 
 
 def run_agent(
-    user_message: str,
+    conversation,
     context: FinancialContext | None = None,
     retriever=None,
+    web_search=None,
     provider: str = "groq",
     model: str = "llama-3.1-8b-instant",
-    max_iterations: int = 5,
+    max_iterations: int = 6,
     decide_only: bool = False,
 ) -> dict:
-    """Run the tool-calling loop with context elicitation and (optional) knowledge search.
+    """Goal-oriented tool-calling loop over the FULL conversation history.
 
-    `retriever`, if given, is a callable(query:str) -> list[chunk dict] that adds the
-    search_financial_knowledge tool. Returns
-    {"answer", "tool_calls", "asked_for": [...], "sources": [...]}.
-    Personal values are taken from `context` (populated by extraction), never from the
-    model's guessed arguments. If a required personal field is missing, the agent asks.
+    `conversation` is either the latest user string (eval path) or a list of
+    {role, content} turns (product path) so the model keeps the goal + what's known in view
+    and never re-asks. `retriever` adds the RAG knowledge tool; `web_search` adds live web
+    lookup (for facts like prices). Returns {"answer", "tool_calls", "asked_for", "sources"}.
 
-    decide_only=True stops after the model's first tool decision (records which tool it
-    picked / whether it asked) WITHOUT executing tools or making a follow-up call. Used by
-    the eval harness to measure tool-selection + elicitation cheaply (fewer API calls).
+    Missing personal values are never guessed: they come from `context` (extraction), and if a
+    calculator needs one we don't have, the model is told to ask the user for that single thing.
+    decide_only=True stops after the first tool decision (eval tool-selection).
     """
     client = get_client(provider)
     context = context if context is not None else FinancialContext()
-    extract_context(user_message, context, client, model)
+    history = _normalize_history(conversation)
+    latest_user = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
+    extract_context(latest_user, context, client, model)
 
     tool_schemas = list(TOOL_SCHEMAS)
     if retriever is not None:
         tool_schemas.append(SEARCH_TOOL_SCHEMA)
+    if web_search is not None:
+        tool_schemas.append(WEB_SEARCH_TOOL_SCHEMA)
 
-    system_prompt = AGENT_SYSTEM_PROMPT + "\n\n" + context.summary()
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message},
-    ]
-    tools_used = []
-    sources = []
-    seen_urls = set()
+    system_prompt = AGENT_SYSTEM_PROMPT + "\n\nRunning notes on this user: " + context.summary()
+    messages = [{"role": "system", "content": system_prompt}, *history]
+    tools_used, sources, seen_urls, pending_missing = [], [], set(), []
 
     for _ in range(max_iterations):
         try:
@@ -187,28 +221,18 @@ def run_agent(
                 tool_choice="auto", temperature=0.3,
             )
         except BadRequestError as e:
-            # Small models occasionally emit a malformed tool call that the provider
-            # rejects (Groq's "tool_use_failed"). Degrade gracefully: answer without
-            # tools rather than crash. (This is the first link of the Day-10 fallback chain.)
             if "tool_use_failed" not in str(e):
                 raise
             response = chat_completion(client, model=model, messages=messages, temperature=0.3)
-            return {"answer": response.choices[0].message.content, "tool_calls": tools_used,
-                    "asked_for": [], "sources": sources, "degraded": True}
+            return {"answer": _strip_em_dash(response.choices[0].message.content),
+                    "tool_calls": tools_used, "asked_for": pending_missing,
+                    "sources": sources, "degraded": True}
         msg = response.choices[0].message
 
         if not msg.tool_calls:
-            return {"answer": msg.content, "tool_calls": tools_used,
-                    "asked_for": [], "sources": sources}
+            return {"answer": _strip_em_dash(msg.content), "tool_calls": tools_used,
+                    "asked_for": pending_missing, "sources": sources}
 
-        # Gate: if any calculator call needs a personal field we don't have, ask instead of guessing.
-        for tc in msg.tool_calls:
-            missing = context.missing_personal_for(tc.function.name)
-            if missing:
-                return {"answer": _clarifying_question(missing), "tool_calls": tools_used,
-                        "asked_for": missing, "sources": sources}
-
-        # Eval fast-path: record the chosen tool(s) without executing or following up.
         if decide_only:
             return {"answer": None, "tool_calls": [tc.function.name for tc in msg.tool_calls],
                     "asked_for": [], "sources": sources}
@@ -225,34 +249,47 @@ def run_agent(
         for tc in msg.tool_calls:
             name = tc.function.name
             tools_used.append(name)
-            args = json.loads(tc.function.arguments)
+            try:
+                args = json.loads(tc.function.arguments)
+            except (json.JSONDecodeError, TypeError):
+                args = {}
 
-            if name == "search_financial_knowledge":
-                chunks = retriever(args["query"])
+            if name == "search_financial_knowledge" and retriever is not None:
+                chunks = retriever(args.get("query", ""))
                 passages = []
                 for i, ch in enumerate(chunks, 1):
-                    # Truncate each passage: the model needs the gist to ground its answer,
-                    # not the full section. Also keeps the request under tight token limits
-                    # (Groq free tier caps a single request at ~6000 tokens).
-                    snippet = ch["chunk_text"][:600]
-                    passages.append(f"[{i}] {snippet}")
+                    passages.append(f"[{i}] {ch['chunk_text'][:600]}")
                     if ch["source_url"] not in seen_urls:
                         sources.append({"title": ch["title"], "source_url": ch["source_url"]})
                         seen_urls.add(ch["source_url"])
                 result_json = "\n\n".join(passages)
+            elif name == "web_search" and web_search is not None:
+                found = web_search(args.get("query", ""))
+                result_json = found or "No results found. Ask the user for this fact instead."
             else:
-                # Override personal fields with authoritative context values (never trust the
-                # model's version of a personal number); question-specific args pass through.
+                # Personal values come only from context (never the model's guess).
                 for pf in PERSONAL_NUMERIC_FIELDS:
                     if pf in args and getattr(context, pf) is not None:
                         args[pf] = getattr(context, pf)
-                result_json = _execute_tool_call(name, args)
+                missing = context.missing_personal_for(name)
+                if missing:
+                    # Don't run with missing personal info; have the model ask for ONE thing.
+                    pending_missing = missing
+                    result_json = json.dumps({
+                        "error": f"missing required info: {missing[0]}",
+                        "instruction": "Ask the user for just this one thing in a short question. Do not guess it.",
+                    })
+                else:
+                    try:
+                        result_json = _execute_tool_call(name, args)
+                    except (TypeError, ValueError) as e:
+                        result_json = json.dumps({"error": str(e)})
 
             messages.append({"role": "tool", "tool_call_id": tc.id,
                              "name": name, "content": result_json})
 
-    return {"answer": "(agent stopped: max tool iterations reached)",
-            "tool_calls": tools_used, "asked_for": [], "sources": sources}
+    return {"answer": "I need a bit more detail to answer that well. Could you rephrase or add one specific number?",
+            "tool_calls": tools_used, "asked_for": pending_missing, "sources": sources}
 
 
 def make_retriever(k: int = 5):
@@ -273,15 +310,15 @@ DEFAULT_FALLBACK_CHAIN = [
 ]
 
 
-def run_agent_with_fallback(user_message, context=None, retriever=None,
+def run_agent_with_fallback(conversation, context=None, retriever=None, web_search=None,
                             chain=DEFAULT_FALLBACK_CHAIN, **kwargs) -> dict:
     """Run the agent across a fallback chain of (provider, model) until one succeeds.
     Returns the result dict with an added 'model' field naming which one answered."""
     last_error = None
     for provider, model in chain:
         try:
-            out = run_agent(user_message, context=context, retriever=retriever,
-                            provider=provider, model=model, **kwargs)
+            out = run_agent(conversation, context=context, retriever=retriever,
+                            web_search=web_search, provider=provider, model=model, **kwargs)
             out["model"] = model
             return out
         except Exception as e:  # provider down, rate-limited past retries, etc.
