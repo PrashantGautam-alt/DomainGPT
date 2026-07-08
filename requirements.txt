@@ -2,6 +2,9 @@ torch
 transformers
 peft
 bitsandbytes
+trl
+datasets
+accelerate
 faiss-cpu
 sentence-transformers
 fastapi
@@ -9,6 +12,7 @@ uvicorn
 streamlit
 python-dotenv
 openai
+huggingface_hub
 pandas
 beautifulsoup4
 requests

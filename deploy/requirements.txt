@@ -1,0 +1,9 @@
+# Slim deps for the RAG-only Space — no torch-training stack (peft/bitsandbytes)
+# and no scraping/serving extras. sentence-transformers pulls a CPU torch itself.
+streamlit
+faiss-cpu
+sentence-transformers
+openai
+python-dotenv
+huggingface_hub
+numpy

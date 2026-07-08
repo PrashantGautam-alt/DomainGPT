@@ -18,5 +18,8 @@ models/
 # Eval artifacts derived from the corpus — review before ever un-ignoring
 eval/eval_set.json
 
+# HF Space staging dir (assembled by deploy/build_space.sh, pushed to the Space repo)
+deploy/_space/
+
 # OS
 .DS_Store
