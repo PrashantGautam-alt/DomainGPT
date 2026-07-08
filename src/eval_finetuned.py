@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 EVAL_PATH = Path(__file__).resolve().parent.parent / "eval" / "eval_set.json"
 
@@ -70,9 +70,8 @@ def main():
 
     eval_set = json.loads(EVAL_PATH.read_text())
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
-                             bnb_4bit_compute_dtype=torch.bfloat16)
-    model = AutoModelForCausalLM.from_pretrained(args.model, quantization_config=bnb,
+    # bf16 (no bitsandbytes) — 16GB fits on one 24GB A5000, fewer deps to break.
+    model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.bfloat16,
                                                  device_map={"": 0})
 
     tool_correct = tool_total = 0
