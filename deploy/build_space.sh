@@ -13,8 +13,10 @@ mkdir -p "$STAGE"
 cp "$REPO_ROOT/deploy/app.py"          "$STAGE/app.py"
 cp "$REPO_ROOT/deploy/requirements.txt" "$STAGE/requirements.txt"
 cp "$REPO_ROOT/deploy/README.md"       "$STAGE/README.md"
-cp "$REPO_ROOT/src/retrieval.py"       "$STAGE/retrieval.py"
-cp "$REPO_ROOT/src/generate.py"        "$STAGE/generate.py"
+# All src modules the full agent needs (flat layout so intra-imports resolve).
+for m in retrieval generate tools context cache monitor agent service; do
+  cp "$REPO_ROOT/src/$m.py" "$STAGE/$m.py"
+done
 
 echo "Space staged at: $STAGE"
 echo "Contents:"
