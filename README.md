@@ -45,21 +45,32 @@ uploaded to the HuggingFace Hub.
 
 ---
 
-## Results (base Llama-3.1-8B baseline — fine-tuned column filled after training)
+## Results
 
-| Metric | Base Llama-3.1-8B | Fine-tuned | GPT-3.5 |
-|---|---|---|---|
-| Retrieval precision@5 | **0.667** | (retrieval shared) | — |
-| Retrieval MRR | **0.833** | (retrieval shared) | — |
-| Tool-selection accuracy | **0.895** | _tbd_ | _tbd_ |
-| Context-elicitation ask-rate | **0.80** | _tbd_ | _tbd_ |
-| Context-elicitation proceed-rate | **1.00** | _tbd_ | _tbd_ |
-| Faithfulness (LLM-judged) | _tbd_ | _tbd_ | _tbd_ |
-| Advice-boundary compliance | _tbd_ | _tbd_ | _tbd_ |
+**Retrieval** (shared by all models — FAISS over the corpus): precision@5 = **0.667**, MRR = **0.833**.
 
-Eval harness: `src/eval.py` (retrieval + tool-selection + elicitation) and `src/eval_part2.py`
-(faithfulness + advice-boundary, LLM-judged). Eval set: `eval/eval_set.json` (24 labeled examples
-across knowledge / calc / elicit / boundary types).
+**Zero-shot behavior — base vs. QLoRA fine-tuned** (same prompt, same eval set, measured with
+`src/eval_finetuned.py` on the server): the headline result is what the fine-tune taught.
+
+| Metric | Base Llama-3.1-8B | **QLoRA fine-tuned** |
+|---|---|---|
+| Calculator tool-selection accuracy | 0.00 | **1.00** |
+| Context-elicitation ask-rate | 0.80 | **1.00** |
+| Context-elicitation proceed-rate | 0.00 | **1.00** |
+
+Base Llama, given only the system prompt, never emits a structured tool call (it answers calc
+questions in prose). After QLoRA fine-tuning it emits correct, well-formed tool calls
+(`{"name": "affordability_calculator", "parameters": {…}}`) while *keeping* its educational tone
+and advice-boundary compliance (refuses to recommend specific products).
+
+> Two honest framings of tool-selection: **zero-shot** (prompt only — base 0.00 → fine-tuned 1.00,
+> above) and **with the provider's tool-calling API** scaffolding the format (base already 0.895 via
+> the Groq tools API — the agent uses this path in production). The fine-tune's contribution is doing
+> zero-shot what previously needed the API. See DEEP_DIVE §9 for the full discussion.
+
+Eval harness: `src/eval.py` (retrieval + agent tool-selection + elicitation via the tools API),
+`src/eval_finetuned.py` (zero-shot base-vs-fine-tuned via transformers), `src/eval_part2.py`
+(faithfulness + advice-boundary, LLM-judged). Eval set: `eval/eval_set.json` (24 labeled examples).
 
 ---
 
