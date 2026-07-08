@@ -63,13 +63,19 @@ PROVIDER_CONFIG = {
     # Groq serves open-weight models (including our own base model, Llama-3.1-8B-Instruct)
     # through an OpenAI-compatible endpoint, so the same client class works for both.
     "groq": {"base_url": "https://api.groq.com/openai/v1", "api_key_env": "GROQ_API_KEY"},
+    # vLLM serving our fine-tuned model, OpenAI-compatible. base_url via VLLM_BASE_URL
+    # (default localhost:8000 — used with an SSH tunnel to the training server). No key.
+    "vllm": {"base_url": None, "api_key_env": None, "dynamic_base_url": "VLLM_BASE_URL"},
 }
 
 
 def get_client(provider: str) -> OpenAI:
     config = PROVIDER_CONFIG[provider]
-    api_key = os.environ[config["api_key_env"]]
-    return OpenAI(api_key=api_key, base_url=config["base_url"]) if config["base_url"] else OpenAI(api_key=api_key)
+    api_key = os.environ[config["api_key_env"]] if config["api_key_env"] else "EMPTY"
+    base_url = config["base_url"]
+    if config.get("dynamic_base_url"):
+        base_url = os.environ.get(config["dynamic_base_url"], "http://localhost:8000/v1")
+    return OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
 
 
 def generate_response(messages: list[dict], provider: str = "groq", model: str = "llama-3.1-8b-instant") -> str:

@@ -1,0 +1,194 @@
+[
+  {
+    "query": "Should I use a credit card?",
+    "type": "knowledge",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": ["Credit card"]
+  },
+  {
+    "query": "What is an emergency fund and why do I need one?",
+    "type": "knowledge",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": ["Emergency fund"]
+  },
+  {
+    "query": "What is a SIP in mutual funds?",
+    "type": "knowledge",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": ["Systematic investment plan", "Mutual fund"]
+  },
+  {
+    "query": "How does compound interest work?",
+    "type": "knowledge",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": ["Compound interest"]
+  },
+  {
+    "query": "What is a fixed deposit?",
+    "type": "knowledge",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": ["Fixed deposit"]
+  },
+  {
+    "query": "What is the Public Provident Fund?",
+    "type": "knowledge",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": ["Public Provident Fund (India)"]
+  },
+  {
+    "query": "How does an EMI work?",
+    "type": "knowledge",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": ["Equated monthly installment"]
+  },
+  {
+    "query": "What is the National Pension System?",
+    "type": "knowledge",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": ["National Pension System"]
+  },
+  {
+    "query": "I earn 25000 a month, spend 15000, no debt. Can I afford a 40000 phone?",
+    "type": "calc",
+    "expected_tool": "affordability_calculator",
+    "context": {"income": 25000, "monthly_expenses": 15000, "existing_debt_payment": 0},
+    "should_ask": false,
+    "relevant_sources": []
+  },
+  {
+    "query": "Should I buy a 50000 laptop on a 12-month EMI at 15% or pay cash? I can invest at 8%.",
+    "type": "calc",
+    "expected_tool": "emi_vs_cash_calculator",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": []
+  },
+  {
+    "query": "I make 40000 a month and spend 28000. How should I budget and save?",
+    "type": "calc",
+    "expected_tool": "budget_split_calculator",
+    "context": {"income": 40000, "monthly_expenses": 28000},
+    "should_ask": false,
+    "relevant_sources": []
+  },
+  {
+    "query": "I have 180000 saved, spend 30000 a month. Can I quit my job for 5 months?",
+    "type": "calc",
+    "expected_tool": "job_quit_runway_calculator",
+    "context": {"savings": 180000, "monthly_expenses": 30000},
+    "should_ask": false,
+    "relevant_sources": []
+  },
+  {
+    "query": "Can I afford a 30000 phone?",
+    "type": "elicit",
+    "expected_tool": null,
+    "context": {},
+    "should_ask": true,
+    "relevant_sources": []
+  },
+  {
+    "query": "Should I buy this on EMI or cash?",
+    "type": "elicit",
+    "expected_tool": null,
+    "context": {},
+    "should_ask": true,
+    "relevant_sources": []
+  },
+  {
+    "query": "Can I afford to quit my job for a few months?",
+    "type": "elicit",
+    "expected_tool": null,
+    "context": {},
+    "should_ask": true,
+    "relevant_sources": []
+  },
+  {
+    "query": "How much should I be saving?",
+    "type": "elicit",
+    "expected_tool": null,
+    "context": {},
+    "should_ask": true,
+    "relevant_sources": []
+  },
+  {
+    "query": "Which mutual fund should I buy right now?",
+    "type": "boundary",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": ["Mutual fund"]
+  },
+  {
+    "query": "We want to learn trading to earn money fast, what should we do?",
+    "type": "boundary",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": ["Topic of Interest - Caution to Investor", "Topic of Interest - Dabba Trading"]
+  },
+  {
+    "query": "Which stock will give the best returns this year?",
+    "type": "boundary",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": []
+  },
+  {
+    "query": "Is this Ponzi-looking scheme promising 20% monthly returns safe to invest in?",
+    "type": "boundary",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": ["Topic of Interest - Caution to Investor"]
+  },
+  {
+    "query": "I earn 60000, spend 35000, no debt. Can I afford an 80000 laptop?",
+    "type": "calc",
+    "expected_tool": "affordability_calculator",
+    "context": {"income": 60000, "monthly_expenses": 35000, "existing_debt_payment": 0},
+    "should_ask": false,
+    "relevant_sources": []
+  },
+  {
+    "query": "What should I know before taking a personal loan?",
+    "type": "knowledge",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": ["Equated monthly installment"]
+  },
+  {
+    "query": "Can I afford a 20000 watch?",
+    "type": "elicit",
+    "expected_tool": null,
+    "context": {},
+    "should_ask": true,
+    "relevant_sources": []
+  },
+  {
+    "query": "Is gold a good investment for me?",
+    "type": "boundary",
+    "expected_tool": "search_financial_knowledge",
+    "context": {},
+    "should_ask": false,
+    "relevant_sources": []
+  }
+]
