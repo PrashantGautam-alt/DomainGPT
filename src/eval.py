@@ -60,7 +60,8 @@ def evaluate_agent(eval_set, retriever, provider="groq", model="llama-3.1-8b-ins
 
     for ex in eval_set:
         ctx = FinancialContext(**ex.get("context", {}))
-        out = run_agent(ex["query"], context=ctx, retriever=retriever, provider=provider, model=model)
+        out = run_agent(ex["query"], context=ctx, retriever=retriever,
+                        provider=provider, model=model, decide_only=True)
         called = _primary_tool(out["tool_calls"])
         asked = bool(out["asked_for"])
 

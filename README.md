@@ -1,88 +1,113 @@
-# DomainGPT — Personal Financial Decision Assistant (Agentic MVP)
+# DomainGPT — Agentic Personal-Finance Assistant
 
-A deployed, **agentic QLoRA-fine-tuned + RAG + tool-calling** assistant that helps students and
-early-career professionals make everyday financial decisions — "can I afford this phone, cash or EMI?",
-"should I use a credit card?", "how much should I save?", "can I quit my job?" — by reasoning over their
-actual personal context (income, expenses, debts, goals) with deterministic calculator tools, and
-explaining general principles with citations rather than recommending specific investment products.
-Built with a **production eval harness** and **MLOps**. The applied-AI flagship in Prashant's 2026 intern portfolio.
+A deployed **agentic** assistant that helps students and early-career professionals in India make
+everyday money decisions — *"can I afford this phone, cash or EMI?"*, *"should I use a credit card?"*,
+*"how much should I save?"*, *"should we start trading to earn money?"* — by combining four techniques,
+each doing a job the others can't:
 
-## Domain
-**Personal financial decision-making for students/early professionals** — not a finance-facts chatbot, an
-**agent that takes in someone's actual situation and reasons over it**. Real questions that motivated this
-(asked by Prashant's own friends, verbatim-ish): *"we want to learn trading to earn money, our parents
-don't earn much, what should we do," "I want to buy a phone, which one is a good investment, and should I
-buy it on cash or EMI," "should I use a credit card," "how much should I save."*
+- **RAG** grounds general financial principles in cited investor-education sources (NCFE / SEBI / Wikipedia)
+- **Tool-calling calculators** do the arithmetic **deterministically** (never the LLM)
+- **Context elicitation** asks for missing personal numbers instead of guessing them
+- A **QLoRA fine-tune** of Llama-3.1-8B teaches the behavioral policy (when to ask, which tool, tradeoff-first tone, and the educational-only advice boundary)
 
-**Scope decision (locked 2026-07-03):** this pivoted from a pure Q&A/RAG assistant into an agentic
-decision assistant, but scoped as an **MVP, not a production product**, for the internship-timeline build.
-See "What's explicitly out of scope for this build" below — accounts, persistent storage, and
-monetization are deferred to a v2 vision, not part of this sprint.
+Shipped with a **production eval harness** and **MLOps** (privacy-aware logging, restricted semantic
+caching, a model fallback chain, and an ops dashboard). Personal data is **ephemeral only** — never
+written to disk or a database.
 
-**Why this is a stronger direction than plain Q&A:**
-- Questions like "can I afford this phone" require reasoning over real numbers (income, expenses, existing
-  debt) — a genuine case for **tool calling** (deterministic calculators), not just retrieval.
-- It's the authentic use case — these are literally the questions Prashant's friends ask him.
-- Tool-calling/agentic design is exactly the in-demand 2026 skill signal per `CONTEXT.md`'s market data —
-  a step up from a static RAG-over-docs bot.
+> 📄 **[DEEP_DIVE.md](../DEEP_DIVE.md)** explains every component and design decision in interview-defense depth.
 
-**The compliance line, restated precisely (this got sharper with the pivot):** affordability math,
-EMI-vs-cash comparisons, budget splits, and savings-runway calculations are **arithmetic + general
-principles** — safe territory, and the assistant can be directive here ("yes, you can afford this in 3
-months" / "EMI costs you ₹X more than cash"). The line is **recommending specific investment products**
-("buy this mutual fund," "invest in this stock") — that stays SEBI-RIA-regulated territory and the
-assistant must stay educational/tradeoff-first there, same as before.
+## Live demo
+🔗 _live link goes here after deploy_ · Educational information only — not personalized investment advice.
 
-**Data sensitivity (new with this pivot, must be designed for, not bolted on):** income, expenses, debts,
-and goals are sensitive personal data. The MVP is **session-based/ephemeral only** — no accounts, no
-database of anyone's financial details, nothing persisted to disk. Logging must never store raw sensitive
-fields in plaintext (see MLOps section in `ROADMAP.md`).
+---
 
-**Corpus (licensing-checked 2026-07-03 — see `CHECKPOINT.md` for the full check):**
-- [NCFE — National Centre for Financial Education](https://ncfe.org.in/) — official RBI/SEBI/IRDAI/PFRDA-backed financial literacy body. **Primary source**, used for grounding explanations.
-- SEBI investor education (investor.sebi.gov.in) — secondary source
-- Wikipedia (CC BY-SA) — supplementary source for standard term definitions (SIP, PPF, NPS, EMI)
-- Real friend questions (see above) — the authentic eval-set seed
+## Architecture
 
-**Rejected sources:** Zerodha Varsity (explicit "reproduction... is not permitted" copyright notice) and
-RBI's main site (blocks non-browser/bot access outright). Don't scrape either.
+```
+Streamlit UI ── FinancialContext in session_state (ephemeral, never persisted)
+     │
+     ▼
+service.answer() ─ semantic cache (general-principle answers only) ─ privacy-aware logging
+     │
+     ▼
+agent (native tool-calling loop, from scratch — no framework) + fallback chain
+   ├─ extract_context() → fill personal fields from the message
+   ├─ missing a required personal field? → ASK, don't guess
+   ├─ search_financial_knowledge → FAISS retrieval over the corpus → cited chunks
+   └─ calculator → deterministic Python (tools.py), personal args taken from context
+     │
+     ▼
+FAISS IndexFlatL2 (271 chunks, bge-small-en-v1.5) built by ingest.py from NCFE/SEBI/Wikipedia
+```
 
-**Target users:** Prashant's close circle — 4–5 friends to start, the same people already asking him these
-questions in real life.
+Generation is served by **Groq** (Llama-3.1-8B, OpenAI-compatible API); the fine-tuned model is
+uploaded to the HuggingFace Hub.
 
-## What it is (the components)
-1. **Personal context elicitation** — the agent asks for (or extracts from natural conversation) income, expenses, debts, goals — held in ephemeral session state only, never persisted
-2. **Tool-calling calculators** — deterministic Python functions (affordability, EMI-vs-cash, budget/savings-rate split, job-quit runway) the LLM calls instead of doing arithmetic itself
-3. **RAG** over a **vector database** of investor-education content, for grounding general-principle explanations with citations
-4. **QLoRA fine-tune** of Llama — teaches when to ask a clarifying question vs. answer directly, which tool to call, and a structured tradeoff-first tone on the advice-boundary questions
-5. **Production eval harness** — faithfulness, hallucination rate, retrieval precision@k, **tool-selection accuracy**, **context-elicitation appropriateness**, LLM-as-judge vs GPT
-6. **MLOps** — latency/cost monitoring, quality-drift tracking, caching, fallback strategy, **privacy-aware logging** (no raw sensitive fields persisted)
-7. **Deployment** — public app + real users (friends) + a feedback loop
+---
 
-## What's explicitly out of scope for this build (v2 vision, not blocking)
-- User accounts / login
-- Persistent budgeting or goal-tracking over time (anything requiring a database of someone's financial history)
-- Monetization
-These are real ambitions worth revisiting after the MVP ships and after internship-application season —
-they change the risk profile (real financial data at rest, business/legal overhead) enough that they
-shouldn't gate or blend into this sprint.
+## Results (base Llama-3.1-8B baseline — fine-tuned column filled after training)
 
-## The goal / what we are targeting
-- **Primary:** a portfolio piece that wins **applied ML / AI Engineer / GenAI / MLOps** internships in 2026.
-- **Secondary:** broad-acceptance — also reads well to SWE and inference screens (systems-thinking).
-- It must out-signal a high-CPI generalist competitor whose "GenAI chatbot" is just an API wrapper.
+| Metric | Base Llama-3.1-8B | Fine-tuned | GPT-3.5 |
+|---|---|---|---|
+| Retrieval precision@5 | **0.667** | (retrieval shared) | — |
+| Retrieval MRR | **0.833** | (retrieval shared) | — |
+| Tool-selection accuracy | **0.895** | _tbd_ | _tbd_ |
+| Context-elicitation ask-rate | **0.80** | _tbd_ | _tbd_ |
+| Context-elicitation proceed-rate | **1.00** | _tbd_ | _tbd_ |
+| Faithfulness (LLM-judged) | _tbd_ | _tbd_ | _tbd_ |
+| Advice-boundary compliance | _tbd_ | _tbd_ | _tbd_ |
 
-## Definition of Done
-- [ ] Public deployed app (live link) + real users (N+, starting with 4-5 friends)
-- [ ] QLoRA fine-tuned model (uploaded to HuggingFace) beating a base/GPT baseline on a domain eval
-- [ ] Working RAG over a real vector DB with measured retrieval precision
-- [ ] Tool-calling calculators wired in and measured (tool-selection accuracy)
-- [ ] Eval harness producing a metrics report (faithfulness, hallucination rate, precision@k, tool-selection accuracy, context-elicitation appropriateness)
-- [ ] MLOps: monitoring dashboard + caching + fallback + privacy-aware logging (no raw sensitive fields stored)
-- [ ] Clean README with architecture diagram + all metrics + demo
-- [ ] Prashant can explain every component without notes (interview-ready)
+Eval harness: `src/eval.py` (retrieval + tool-selection + elicitation) and `src/eval_part2.py`
+(faithfulness + advice-boundary, LLM-judged). Eval set: `eval/eval_set.json` (24 labeled examples
+across knowledge / calc / elicit / boundary types).
 
-## Status
-In progress — build #2 in the pipeline (after the LocateAnything agent). Domain locked: personal financial
-decision assistant, agentic MVP (pivoted 2026-07-02 from Indian Parliament Q&A → student personal-finance
-literacy assistant → this agentic scope, confirmed 2026-07-03, on the day Day 1 build work started).
+---
+
+## Repository layout
+
+| Path | What |
+|---|---|
+| `src/ingest.py` | Build the FAISS index — non-uniform chunking, bge embeddings |
+| `src/retrieval.py` | Load index, embed query, top-k retrieval (+ runtime index download) |
+| `src/generate.py` | Provider clients (Groq/OpenAI), compliance system prompt, rate-limit backoff |
+| `src/tools.py` | The four deterministic calculators (+ `tests/test_tools.py`, 10/10) |
+| `src/agent.py` | Native tool-calling loop, RAG-as-a-tool, fallback chain |
+| `src/context.py` | `FinancialContext` + slot-filling extraction (ephemeral) |
+| `src/cache.py` | Restricted semantic cache (general-principle answers only) |
+| `src/monitor.py` | Privacy-aware request logging + cost/latency |
+| `src/service.py` | Orchestration: cache → agent+fallback → cache-write → log |
+| `src/eval.py`, `src/eval_part2.py` | Eval harness (Parts 1 & 2) |
+| `src/prepare_training_data.py`, `src/train_qlora.py` | QLoRA data generation + training |
+| `app/ui.py`, `app/dashboard.py` | Chat UI + ops dashboard |
+| `deploy/` | HF Space files + `build_space.sh` |
+
+---
+
+## The compliance line
+
+Arithmetic (affordability, EMI-vs-cash, budget splits, savings runway) can be **directive** once the
+numbers are known. Recommending a **specific investment product** (a stock/fund to buy) stays
+**educational only** — because SEBI RIA rules regulate personalized product advice, not general math.
+
+## Out of scope (v2 vision, deliberately deferred)
+
+User accounts, persistent budgeting/goal-tracking (a database of anyone's financial history), and
+monetization. These change the risk profile (sensitive data at rest, legal overhead) enough that they
+shouldn't blend into this internship-timeline MVP.
+
+## Corpus & licensing
+
+NCFE (primary, official financial-literacy body), SEBI investor-education (secondary), Wikipedia
+(CC BY-SA, supplementary) — 82 documents → 271 chunks. **Zerodha Varsity** (explicit reproduction
+prohibition) and **RBI** (blocks non-browser access) were checked and rejected.
+
+## Run locally
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # fill GROQ_API_KEY, OPENAI_API_KEY (optional), HF_TOKEN
+python src/ingest.py             # build the FAISS index
+streamlit run app/ui.py          # chat UI
+python src/eval.py               # baseline metrics
+```

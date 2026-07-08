@@ -1,9 +1,25 @@
 import os
+import re
+import time
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 
 load_dotenv()
+
+
+def chat_completion(client: OpenAI, max_retries: int = 6, **kwargs):
+    """client.chat.completions.create with backoff on rate limits (429).
+    Groq's free tier is ~6000 tokens/min; this respects the 'try again in Xs' hint
+    so a burst of calls (e.g. the eval loop) doesn't crash."""
+    for attempt in range(max_retries):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except RateLimitError as e:
+            match = re.search(r"try again in ([\d.]+)s", str(e))
+            wait = float(match.group(1)) if match else 2 ** attempt
+            time.sleep(min(wait + 0.5, 30))
+    return client.chat.completions.create(**kwargs)  # last try surfaces the error
 
 SYSTEM_PROMPT = """You are DomainGPT, a financial-literacy assistant for students and early-career \
 professionals in India.
@@ -58,5 +74,5 @@ def get_client(provider: str) -> OpenAI:
 
 def generate_response(messages: list[dict], provider: str = "groq", model: str = "llama-3.1-8b-instant") -> str:
     client = get_client(provider)
-    response = client.chat.completions.create(model=model, messages=messages, temperature=0.3)
+    response = chat_completion(client, model=model, messages=messages, temperature=0.3)
     return response.choices[0].message.content

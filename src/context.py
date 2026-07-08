@@ -65,7 +65,9 @@ Message: """
 
 def extract_context(message: str, context: FinancialContext, client, model: str) -> FinancialContext:
     """Update `context` in place with any financial values stated in `message`."""
-    response = client.chat.completions.create(
+    from generate import chat_completion
+    response = chat_completion(
+        client,
         model=model,
         messages=[{"role": "user", "content": EXTRACTION_PROMPT + message}],
         temperature=0.0,

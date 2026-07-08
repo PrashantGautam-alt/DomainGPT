@@ -1,0 +1,3 @@
+{"timestamp": "2026-07-08T13:19:23.010014+00:00", "latency_ms": 248301, "tools_called": ["search_financial_knowledge"], "context_provided": false, "asked_for_missing": false, "degraded": false, "cache_hit": false, "model": "llama-3.1-8b-instant", "estimated_cost_usd": 0.0}
+{"timestamp": "2026-07-08T13:19:23.018914+00:00", "latency_ms": 0, "tools_called": [], "context_provided": false, "asked_for_missing": false, "degraded": false, "cache_hit": true, "model": "cache", "estimated_cost_usd": 0.0}
+{"timestamp": "2026-07-08T13:19:53.234412+00:00", "latency_ms": 30214, "tools_called": ["affordability_calculator"], "context_provided": true, "asked_for_missing": false, "degraded": false, "cache_hit": false, "model": "llama-3.1-8b-instant", "estimated_cost_usd": 0.0}

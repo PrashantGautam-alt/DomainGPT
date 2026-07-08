@@ -13,7 +13,9 @@ Context elicitation (asking when a required field is missing) is layered on in D
 import json
 from dataclasses import asdict
 
-from generate import get_client
+from openai import BadRequestError
+
+from generate import get_client, chat_completion
 from context import FinancialContext, extract_context, PERSONAL_NUMERIC_FIELDS
 from tools import (
     affordability_calculator,
@@ -147,6 +149,7 @@ def run_agent(
     provider: str = "groq",
     model: str = "llama-3.1-8b-instant",
     max_iterations: int = 5,
+    decide_only: bool = False,
 ) -> dict:
     """Run the tool-calling loop with context elicitation and (optional) knowledge search.
 
@@ -155,6 +158,10 @@ def run_agent(
     {"answer", "tool_calls", "asked_for": [...], "sources": [...]}.
     Personal values are taken from `context` (populated by extraction), never from the
     model's guessed arguments. If a required personal field is missing, the agent asks.
+
+    decide_only=True stops after the model's first tool decision (records which tool it
+    picked / whether it asked) WITHOUT executing tools or making a follow-up call. Used by
+    the eval harness to measure tool-selection + elicitation cheaply (fewer API calls).
     """
     client = get_client(provider)
     context = context if context is not None else FinancialContext()
@@ -174,10 +181,20 @@ def run_agent(
     seen_urls = set()
 
     for _ in range(max_iterations):
-        response = client.chat.completions.create(
-            model=model, messages=messages, tools=tool_schemas,
-            tool_choice="auto", temperature=0.3,
-        )
+        try:
+            response = chat_completion(
+                client, model=model, messages=messages, tools=tool_schemas,
+                tool_choice="auto", temperature=0.3,
+            )
+        except BadRequestError as e:
+            # Small models occasionally emit a malformed tool call that the provider
+            # rejects (Groq's "tool_use_failed"). Degrade gracefully: answer without
+            # tools rather than crash. (This is the first link of the Day-10 fallback chain.)
+            if "tool_use_failed" not in str(e):
+                raise
+            response = chat_completion(client, model=model, messages=messages, temperature=0.3)
+            return {"answer": response.choices[0].message.content, "tool_calls": tools_used,
+                    "asked_for": [], "sources": sources, "degraded": True}
         msg = response.choices[0].message
 
         if not msg.tool_calls:
@@ -190,6 +207,11 @@ def run_agent(
             if missing:
                 return {"answer": _clarifying_question(missing), "tool_calls": tools_used,
                         "asked_for": missing, "sources": sources}
+
+        # Eval fast-path: record the chosen tool(s) without executing or following up.
+        if decide_only:
+            return {"answer": None, "tool_calls": [tc.function.name for tc in msg.tool_calls],
+                    "asked_for": [], "sources": sources}
 
         messages.append({
             "role": "assistant",
@@ -209,7 +231,11 @@ def run_agent(
                 chunks = retriever(args["query"])
                 passages = []
                 for i, ch in enumerate(chunks, 1):
-                    passages.append(f"[{i}] {ch['chunk_text']}")
+                    # Truncate each passage: the model needs the gist to ground its answer,
+                    # not the full section. Also keeps the request under tight token limits
+                    # (Groq free tier caps a single request at ~6000 tokens).
+                    snippet = ch["chunk_text"][:600]
+                    passages.append(f"[{i}] {snippet}")
                     if ch["source_url"] not in seen_urls:
                         sources.append({"title": ch["title"], "source_url": ch["source_url"]})
                         seen_urls.add(ch["source_url"])
@@ -235,6 +261,33 @@ def make_retriever(k: int = 5):
     index, chunks = load_index()
     embedding_model = load_embedding_model()
     return lambda query: retrieve_top_k(query, index, chunks, embedding_model, k=k)
+
+
+# Fallback chain: try each (provider, model) in order until one answers. Order = best/most
+# specialised first, most robust last. The fine-tuned model (once served) goes first; base
+# Llama-3.1-8B is the everyday model; the 70B is the sturdier last resort. Keeps the app
+# alive if the primary is down or erroring.
+DEFAULT_FALLBACK_CHAIN = [
+    ("groq", "llama-3.1-8b-instant"),
+    ("groq", "llama-3.3-70b-versatile"),
+]
+
+
+def run_agent_with_fallback(user_message, context=None, retriever=None,
+                            chain=DEFAULT_FALLBACK_CHAIN, **kwargs) -> dict:
+    """Run the agent across a fallback chain of (provider, model) until one succeeds.
+    Returns the result dict with an added 'model' field naming which one answered."""
+    last_error = None
+    for provider, model in chain:
+        try:
+            out = run_agent(user_message, context=context, retriever=retriever,
+                            provider=provider, model=model, **kwargs)
+            out["model"] = model
+            return out
+        except Exception as e:  # provider down, rate-limited past retries, etc.
+            last_error = e
+            continue
+    raise RuntimeError(f"All fallback models failed. Last error: {last_error}")
 
 
 if __name__ == "__main__":

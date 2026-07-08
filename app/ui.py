@@ -13,15 +13,20 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from agent import run_agent, make_retriever
+from agent import make_retriever
 from context import FinancialContext
+from cache import SemanticCache
+from retrieval import load_embedding_model
+from service import answer
 
 st.set_page_config(page_title="DomainGPT", page_icon="💰")
 
 
 @st.cache_resource
-def get_retriever():
-    return make_retriever()
+def get_resources():
+    retriever = make_retriever()
+    cache = SemanticCache(load_embedding_model())
+    return retriever, cache
 
 
 st.title("DomainGPT")
@@ -48,8 +53,9 @@ if prompt := st.chat_input("Ask a money question…"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
+        retriever, cache = get_resources()
         with st.spinner("Thinking…"):
-            out = run_agent(prompt, context=st.session_state.context, retriever=get_retriever())
+            out = answer(prompt, st.session_state.context, retriever, cache=cache)
         st.markdown(out["answer"])
         if out["sources"]:
             st.markdown("**Sources:**")
