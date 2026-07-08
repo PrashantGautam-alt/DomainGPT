@@ -79,8 +79,12 @@ def main():
         bnb_4bit_compute_dtype=torch.bfloat16,
         bnb_4bit_use_double_quant=True,
     )
+    # Pin the whole model to ONE GPU ({"": 0}). device_map="auto" would shard it across
+    # both A5000s, which is for inference — during training the loss computation then
+    # indexes tensors that live on different GPUs and crashes. A 4-bit 8B fits in ~6GB, so
+    # a single 24GB A5000 is plenty. (Equivalent to setting CUDA_VISIBLE_DEVICES=0.)
     model = AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL, quantization_config=bnb_config, device_map="auto", torch_dtype=torch.bfloat16,
+        BASE_MODEL, quantization_config=bnb_config, device_map={"": 0}, torch_dtype=torch.bfloat16,
     )
     model = prepare_model_for_kbit_training(model)
 
@@ -159,9 +163,15 @@ def main():
 
     if args.merge or args.push_to_hub:
         from peft import PeftModel
-        print("Merging adapter into base weights (loads base in fp16, needs more RAM/VRAM)...")
+        import gc
+        # Free the 4-bit training model (~6GB) before loading the fp16 base (~16GB) for
+        # merging, so both don't sit in VRAM at once. Merge on the single GPU (not "auto").
+        del trainer, model
+        gc.collect()
+        torch.cuda.empty_cache()
+        print("Merging adapter into base weights (loads base in fp16)...")
         base = AutoModelForCausalLM.from_pretrained(
-            BASE_MODEL, torch_dtype=torch.bfloat16, device_map="auto",
+            BASE_MODEL, torch_dtype=torch.bfloat16, device_map={"": 0},
         )
         merged = PeftModel.from_pretrained(base, str(adapter_dir)).merge_and_unload()
         merged_dir = OUTPUT_DIR / "merged"
