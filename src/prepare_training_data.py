@@ -165,16 +165,19 @@ def build_advice_boundary_examples(client, n: int) -> list[dict]:
     return examples
 
 
-def main(n_per_category: int = 50):
+def main(n_tool: int = 150, n_elicit: int = 60, n_boundary: int = 60):
+    # Weighted toward tool-selection: emitting the structured tool call is the "unnatural"
+    # behavior the base model resists, so it needs the most examples (elicitation/boundary
+    # are prose, closer to base instincts, and learn from fewer).
     client = get_client("groq")
     random.seed(42)
 
     print("Generating tool-selection examples...")
-    tool_ex = build_tool_selection_examples(client, n_per_category)
+    tool_ex = build_tool_selection_examples(client, n_tool)
     print("Generating context-elicitation examples...")
-    elicit_ex = build_elicitation_examples(client, n_per_category)
+    elicit_ex = build_elicitation_examples(client, n_elicit)
     print("Generating advice-boundary examples...")
-    boundary_ex = build_advice_boundary_examples(client, n_per_category)
+    boundary_ex = build_advice_boundary_examples(client, n_boundary)
 
     all_examples = tool_ex + elicit_ex + boundary_ex
     random.shuffle(all_examples)

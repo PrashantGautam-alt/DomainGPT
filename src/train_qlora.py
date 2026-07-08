@@ -38,26 +38,9 @@ def load_examples() -> list[dict]:
         return [json.loads(line) for line in f]
 
 
-def format_example(example: dict, tokenizer) -> str:
-    """Render one chat example to a single training string via the chat template.
-    All assistant targets are plain text content (tool-selection targets are the
-    Llama-3.1 tool-call JSON as text), so a straight chat-template render is enough.
-
-    Some template variants append a trailing empty assistant generation prompt even with
-    add_generation_prompt=False; trim anything after the final <|eot_id|> so the SFT target
-    ends cleanly on the assistant's turn."""
-    text = tokenizer.apply_chat_template(
-        example["messages"], tokenize=False, add_generation_prompt=False,
-    )
-    eot = "<|eot_id|>"
-    if eot in text:
-        text = text[: text.rfind(eot) + len(eot)]
-    return text
-
-
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--epochs", type=int, default=3)
+    parser.add_argument("--epochs", type=int, default=4)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--push_to_hub", action="store_true")
@@ -89,21 +72,31 @@ def main():
     model = prepare_model_for_kbit_training(model)
 
     # --- 2. LoRA adapters (only these train) ---
+    # Expanded from q/v to q/k/v/o attention projections — more trainable capacity to learn
+    # the structured tool-call behavior, which the minimal q/v set didn't capture last run.
     lora_config = LoraConfig(
         r=16, lora_alpha=32, lora_dropout=0.1,
-        target_modules=["q_proj", "v_proj"], bias="none", task_type="CAUSAL_LM",
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], bias="none", task_type="CAUSAL_LM",
     )
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
-    # --- 3. Dataset ---
+    # --- 3. Dataset (prompt/completion for COMPLETION-ONLY loss) ---
+    # We split each example into a prompt (system + user) and a completion (the assistant
+    # target). TRL then masks the prompt and computes loss ONLY on the completion — so the
+    # learning signal concentrates on the behavior we want (emit the tool-call JSON / ask /
+    # redirect), instead of being diluted across the fixed system prompt + user text. This
+    # was the main reason the first fine-tune learned tone but not tool-calls.
     raw = load_examples()
-    texts = [format_example(ex, tokenizer) for ex in raw]
-    dataset = Dataset.from_dict({"text": texts})
-    print(f"Loaded {len(dataset)} training examples")
-    print("--- sample formatted example ---")
-    print(texts[0][:800])
-    print("--------------------------------")
+    dataset = Dataset.from_list([
+        {"prompt": ex["messages"][:-1], "completion": [ex["messages"][-1]]}
+        for ex in raw
+    ])
+    print(f"Loaded {len(dataset)} training examples (prompt/completion, completion-only loss)")
+    print("--- sample example ---")
+    print("PROMPT:", dataset[0]["prompt"])
+    print("COMPLETION:", dataset[0]["completion"])
+    print("----------------------")
 
     # --- 4. Train ---
     # TRL's SFTTrainer/SFTConfig API has churned a lot across versions:
@@ -139,19 +132,16 @@ def main():
         config_kwargs["max_length"] = 1024
     elif "max_seq_length" in sft_params:
         config_kwargs["max_seq_length"] = 1024
-    # dataset_text_field lives in SFTConfig in newer TRL
-    if "dataset_text_field" in sft_params:
-        config_kwargs["dataset_text_field"] = "text"
+    # With a prompt/completion dataset, TRL masks the prompt automatically; make it explicit
+    # where the flag exists. (Do NOT set dataset_text_field — there is no single text field.)
+    if "completion_only_loss" in sft_params:
+        config_kwargs["completion_only_loss"] = True
     sft_config = SFTConfig(**config_kwargs)
 
     trainer_params = set(inspect.signature(SFTTrainer.__init__).parameters)
     trainer_kwargs = dict(model=model, args=sft_config, train_dataset=dataset)
-    # tokenizer kwarg name differs by version
     tok_key = "processing_class" if "processing_class" in trainer_params else "tokenizer"
     trainer_kwargs[tok_key] = tokenizer
-    # if this TRL still wants dataset_text_field on the trainer, provide it there too
-    if "dataset_text_field" in trainer_params and "dataset_text_field" not in sft_params:
-        trainer_kwargs["dataset_text_field"] = "text"
     trainer = SFTTrainer(**trainer_kwargs)
     trainer.train()
 
