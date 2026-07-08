@@ -102,10 +102,15 @@ def main():
     print("--------------------------------")
 
     # --- 4. Train ---
-    # TRL changed the SFTTrainer API around v0.12: newer versions take an SFTConfig
-    # (with max_seq_length/dataset_text_field baked in) and processing_class=tokenizer;
-    # older versions take TrainingArguments + those as SFTTrainer kwargs + tokenizer=.
-    # Support both so this runs regardless of the server's installed TRL version.
+    # TRL's SFTTrainer/SFTConfig API has churned a lot across versions:
+    #   - max_seq_length was renamed to max_length in SFTConfig
+    #   - dataset_text_field moved from SFTTrainer kwargs into SFTConfig
+    #   - tokenizer= became processing_class=
+    # Instead of guessing the version, introspect the actual signatures and pass only the
+    # kwargs each accepts. Robust across old and new TRL.
+    import inspect
+    from trl import SFTConfig
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     common_args = dict(
         output_dir=str(OUTPUT_DIR),
@@ -122,19 +127,28 @@ def main():
         warmup_ratio=0.03,
         report_to="none",
     )
-    try:
-        from trl import SFTConfig
-        sft_config = SFTConfig(**common_args, max_seq_length=1024, dataset_text_field="text")
-        trainer = SFTTrainer(
-            model=model, args=sft_config, train_dataset=dataset, processing_class=tokenizer,
-        )
-        print("Using newer TRL API (SFTConfig + processing_class)")
-    except (ImportError, TypeError):
-        trainer = SFTTrainer(
-            model=model, args=TrainingArguments(**common_args), train_dataset=dataset,
-            dataset_text_field="text", max_seq_length=1024, tokenizer=tokenizer,
-        )
-        print("Using older TRL API (TrainingArguments + tokenizer)")
+
+    sft_params = set(inspect.signature(SFTConfig.__init__).parameters)
+    config_kwargs = dict(common_args)
+    # sequence-length kwarg name differs by version
+    if "max_length" in sft_params:
+        config_kwargs["max_length"] = 1024
+    elif "max_seq_length" in sft_params:
+        config_kwargs["max_seq_length"] = 1024
+    # dataset_text_field lives in SFTConfig in newer TRL
+    if "dataset_text_field" in sft_params:
+        config_kwargs["dataset_text_field"] = "text"
+    sft_config = SFTConfig(**config_kwargs)
+
+    trainer_params = set(inspect.signature(SFTTrainer.__init__).parameters)
+    trainer_kwargs = dict(model=model, args=sft_config, train_dataset=dataset)
+    # tokenizer kwarg name differs by version
+    tok_key = "processing_class" if "processing_class" in trainer_params else "tokenizer"
+    trainer_kwargs[tok_key] = tokenizer
+    # if this TRL still wants dataset_text_field on the trainer, provide it there too
+    if "dataset_text_field" in trainer_params and "dataset_text_field" not in sft_params:
+        trainer_kwargs["dataset_text_field"] = "text"
+    trainer = SFTTrainer(**trainer_kwargs)
     trainer.train()
 
     # --- 5. Save adapter ---
