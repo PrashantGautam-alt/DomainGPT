@@ -6,10 +6,20 @@ Nothing is written to disk or a database (structural privacy decision, see SPEC.
 The agent (agent.run_agent) decides between calculators, knowledge search, or asking a
 clarifying question.
 """
+import os
 import sys
 from pathlib import Path
 
 import streamlit as st
+
+# On Streamlit Community Cloud, API keys are provided via st.secrets. Our src modules read
+# them from os.environ, so copy them across before anything uses them. (Locally, .env is
+# used instead and st.secrets is empty — the try/except keeps that path working too.)
+try:
+    for _k, _v in st.secrets.items():
+        os.environ.setdefault(_k, str(_v))
+except Exception:
+    pass
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 

@@ -1,18 +1,10 @@
-torch
-transformers
-peft
-bitsandbytes
-trl
-datasets
-accelerate
+# Live-app deps ONLY (Streamlit Community Cloud reads this). Lightweight — the LLM is a
+# Groq API call, so no torch-training stack. sentence-transformers pulls a CPU torch for
+# the embedding model. Training deps are in requirements-train.txt (server only).
+streamlit
 faiss-cpu
 sentence-transformers
-fastapi
-uvicorn
-streamlit
-python-dotenv
 openai
+python-dotenv
 huggingface_hub
-pandas
-beautifulsoup4
-requests
+numpy

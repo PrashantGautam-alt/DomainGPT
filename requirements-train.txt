@@ -1,0 +1,18 @@
+# Training / server-side deps (QLoRA fine-tuning on the GPU server).
+# NOT installed by the live app deploy — the app uses the slim requirements.txt.
+# On the training server: pip install -r requirements-train.txt
+torch
+transformers
+peft
+bitsandbytes
+trl
+datasets
+accelerate
+faiss-cpu
+sentence-transformers
+python-dotenv
+openai
+huggingface_hub
+pandas
+beautifulsoup4
+requests
