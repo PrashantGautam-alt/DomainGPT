@@ -17,7 +17,13 @@ written to disk or a database.
 > 📄 **[DEEP_DIVE.md](../DEEP_DIVE.md)** explains every component and design decision in interview-defense depth.
 
 ## Live demo
-🔗 _live link goes here after deploy_ · Educational information only — not personalized investment advice.
+🔗 **[domaingpt-hkf4czjwdsbyxxxsbniddi.streamlit.app](https://domaingpt-hkf4czjwdsbyxxxsbniddi.streamlit.app/)**
+· Educational information only — not personalized investment advice.
+
+The QLoRA fine-tuned model is on the Hub:
+**[huggingface.co/prashantgautam8077/domaingpt-v1](https://huggingface.co/prashantgautam8077/domaingpt-v1)**.
+(The live app serves generation via Groq — a CPU-friendly API call; the fine-tuned model + its
+eval numbers are the separate evidence on the Hub.)
 
 ---
 
